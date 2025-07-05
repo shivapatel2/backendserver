@@ -51,7 +51,7 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
             const videoId = currentTrack.id.replace('youtube_', '');
             console.log('Fetching YouTube audio for video ID:', videoId);
             
-            const response = await fetch(`https://yt-music-backend-6yj1.onrender.com/api/audio/${videoId}`);
+            const response = await fetch(`https://backendserver-feuj.vercel.app/api/audio/${videoId}`);
             console.log('Backend response status:', response.status);
             
             if (!response.ok) {

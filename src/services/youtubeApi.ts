@@ -4,7 +4,7 @@ import { Track as MusicTrack } from '@/pages/Index';
 
 // YouTube Music API Configuration
 // const API_URL = 'http://localhost:3001'; // This was for local testing
-const API_URL = 'https://yt-music-backend-6yj1.onrender.com';
+const API_URL = 'https://backendserver-feuj.vercel.app';
 
 // Interface for a track from the YouTube Music API
 interface YoutubeTrack {
