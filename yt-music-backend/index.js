@@ -17,15 +17,18 @@ app.get('/api/search', async (req, res) => {
   if (!query) return res.status(400).send("Missing query");
 
   try {
-    const results = await yt.search(query, { type: 'video' });
-    const formatted = results.videos.map(v => ({
-      title: v.title,
-      videoId: v.id,
-      url: `https://www.youtube.com/watch?v=${v.id}`,
-      thumbnail: v.thumbnail[0].url,
-      duration: v.duration,
-      channel: v.author.name
+    const search = await yt.search(query, { type: 'video' });
+    
+    // The data structure for videos is different in the new library version.
+    const formatted = search.videos.map(video => ({
+      title: video.title.text,
+      videoId: video.id,
+      url: `https://www.youtube.com/watch?v=${video.id}`,
+      thumbnail: video.thumbnails[0].url,
+      duration: video.duration,
+      channel: video.author.name
     }));
+    
     res.json(formatted);
   } catch (err) {
     console.error("Search error", err);
