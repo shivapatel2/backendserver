@@ -20,6 +20,7 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
   const [duration, setDuration] = useState(0);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { isLiked, addToLikedSongs, removeFromLikedSongs } = useMusicContext();
 
@@ -41,6 +42,9 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
       const fetchAndPlayAudio = async () => {
         let audioUrl = currentTrack.fullTrackUrl || currentTrack.preview_url;
         
+        // Clear any previous errors when loading a new track
+        setStreamError(null);
+        
         // If the track is from YouTube, fetch the direct stream URL
         if (currentTrack.source === 'youtube' && currentTrack.id) {
           try {
@@ -53,7 +57,20 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
             if (!response.ok) {
               const errorText = await response.text();
               console.error('Backend error response:', errorText);
-              throw new Error(`Failed to fetch stream URL: ${response.status} ${response.statusText}`);
+              
+              // Provide user-friendly error messages based on the backend response
+              let errorMessage = 'Failed to load the track. Please try again later or use an alternative source.';
+              if (errorText.includes('Video is unavailable')) {
+                errorMessage = 'This video is unavailable or private. Please try a different track.';
+              } else if (errorText.includes('age-restricted')) {
+                errorMessage = 'This video is age-restricted and cannot be played. Please try a different track.';
+              } else if (errorText.includes('region')) {
+                errorMessage = 'This video is not available in your region. Please try a different track.';
+              } else if (errorText.includes('No suitable audio format')) {
+                errorMessage = 'No suitable audio format found for this video. Please try a different track.';
+              }
+              
+              throw new Error(errorMessage);
             }
             
             const data = await response.json();
@@ -71,6 +88,7 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
             // For now, we'll just set loading to false and not play anything
             // In the future, we could implement a fallback to search for the same song on other platforms
             setIsLoading(false);
+            setStreamError(error instanceof Error ? error.message : 'Failed to load the track. Please try again later or use an alternative source.');
             return;
           }
         }
@@ -82,6 +100,7 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
         } else {
           console.error('No audio URL available for track:', currentTrack.title);
           setIsLoading(false);
+          setStreamError('No audio URL available for the track. Please try again later or use an alternative source.');
         }
       };
 
@@ -178,6 +197,7 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
     console.error('Audio error:', error);
     setIsAudioReady(false);
     setIsLoading(false);
+    setStreamError('An error occurred while loading the track. Please try again later or use an alternative source.');
   };
 
   // Handle progress bar change
@@ -344,8 +364,15 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
             <span className="text-xs">{formatTime(duration)}</span>
           </div>
           
+          {/* Error message display */}
+          {streamError && (
+            <div className="text-xs text-red-400 text-center px-2 py-1 bg-red-900/20 rounded">
+              {streamError}
+            </div>
+          )}
+          
           {/* Preview indicator and full duration */}
-          {currentTrack && (
+          {currentTrack && !streamError && (
             <div className="flex items-center justify-between text-xs">
               {getSourceIndicator(currentTrack)}
               {currentTrack.duration > duration && (
