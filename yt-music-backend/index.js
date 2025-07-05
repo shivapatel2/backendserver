@@ -8,7 +8,7 @@ app.use(cors());
 
 let yt;
 (async () => {
-  yt = await Innertube.create();
+  yt = await Innertube.create({ gl: 'US', hl: 'en' });
   console.log("YouTube API ready");
 })();
 
