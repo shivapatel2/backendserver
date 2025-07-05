@@ -56,7 +56,10 @@ app.get('/api/audio/:videoId', (req, res) => {
   const url = `https://www.youtube.com/watch?v=${req.params.videoId}`;
   try {
     res.set({ 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes' });
-    ytdl(url, { filter: 'audioonly' })
+    ytdl(url, {
+      filter: 'audioonly',
+      highWaterMark: 1 << 25, // 32MB buffer to improve stability on Render
+    })
       .pipe(res)
       .on('error', (err) => {
         console.error("Error streaming audio:", err);
