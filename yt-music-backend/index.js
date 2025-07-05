@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const ytdl = require('ytdl-core');
+const { play } = require('play-dl');
 const ytsr = require('ytsr');
 
 const app = express();
@@ -66,102 +66,50 @@ app.get('/api/audio/:videoId', async (req, res) => {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
     console.log('Fetching info for URL:', url);
     
-    // Configure ytdl with better options to avoid blocks
-    const options = {
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate',
-          'DNT': '1',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-        }
-      }
-    };
+    // Use play-dl to get video info and stream URL
+    const videoInfo = await play.video_info(url);
+    console.log('Got video info with play-dl');
     
-    const info = await ytdl.getInfo(url, options);
-    console.log('Got video info, formats available:', info.formats.length);
+    if (!videoInfo) {
+      console.error('No video info found');
+      return res.status(404).send('Video not found');
+    }
     
-    // Log all available formats for debugging
-    console.log('Available formats:');
-    info.formats.forEach((format, index) => {
-      console.log(`${index}: ${format.qualityLabel} - Audio: ${format.hasAudio} Video: ${format.hasVideo} - Bitrate: ${format.bitrate} - AudioBitrate: ${format.audioBitrate}`);
+    // Get the best audio stream
+    const stream = await play.stream(url);
+    console.log('Got stream info:', {
+      type: stream.type,
+      quality: stream.quality,
+      hasAudio: stream.hasAudio,
+      hasVideo: stream.hasVideo
     });
     
-    // Find the best audio-only format with specific criteria
-    let audioFormat = null;
-    
-    // First try to find a high quality audio-only format
-    try {
-      audioFormat = ytdl.chooseFormat(info.formats, { 
-        quality: 'highestaudio',
-        filter: 'audioonly' 
-      });
-      console.log('Found audio-only format:', audioFormat?.qualityLabel);
-    } catch (error) {
-      console.log('ytdl.chooseFormat failed, trying manual selection');
-    }
-    
-    // If no audio-only format found, try to find any audio format
-    if (!audioFormat) {
-      console.log('No audio-only format found, looking for any audio format');
-      const audioFormats = info.formats.filter(format => 
-        format.hasAudio && !format.hasVideo && format.url
-      );
-      if (audioFormats.length > 0) {
-        // Sort by audio quality (bitrate)
-        audioFormats.sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0));
-        audioFormat = audioFormats[0];
-        console.log('Selected audio format:', audioFormat.qualityLabel);
-      }
-    }
-    
-    // If still no audio format, try to find a format with both audio and video but prioritize audio
-    if (!audioFormat) {
-      console.log('No audio-only format found, looking for audio+video format');
-      const audioVideoFormats = info.formats.filter(format => 
-        format.hasAudio && format.hasVideo && format.url
-      );
-      if (audioVideoFormats.length > 0) {
-        // Sort by audio quality first, then by overall quality
-        audioVideoFormats.sort((a, b) => {
-          const audioDiff = (b.audioBitrate || 0) - (a.audioBitrate || 0);
-          if (audioDiff !== 0) return audioDiff;
-          return (b.bitrate || 0) - (a.bitrate || 0);
-        });
-        audioFormat = audioVideoFormats[0];
-        console.log('Selected audio+video format:', audioFormat.qualityLabel);
-      }
+    if (!stream || !stream.url) {
+      console.error('No stream URL available');
+      return res.status(404).send('No suitable audio stream found');
     }
 
-    if (!audioFormat) {
-      console.error('No suitable audio format found');
-      return res.status(404).send('No suitable audio format found');
-    }
-
-    console.log('Selected audio format:', {
-      quality: audioFormat.qualityLabel,
-      audioBitrate: audioFormat.audioBitrate,
-      hasAudio: audioFormat.hasAudio,
-      hasVideo: audioFormat.hasVideo,
-      url: audioFormat.url ? 'Available' : 'Not available'
+    console.log('Selected stream:', {
+      type: stream.type,
+      quality: stream.quality,
+      hasAudio: stream.hasAudio,
+      hasVideo: stream.hasVideo,
+      url: stream.url ? 'Available' : 'Not available'
     });
 
     // Send the direct stream URL to the frontend
     res.json({ 
-      streamUrl: audioFormat.url,
+      streamUrl: stream.url,
       format: {
-        quality: audioFormat.qualityLabel,
-        audioBitrate: audioFormat.audioBitrate,
-        hasAudio: audioFormat.hasAudio,
-        hasVideo: audioFormat.hasVideo
+        type: stream.type,
+        quality: stream.quality,
+        hasAudio: stream.hasAudio,
+        hasVideo: stream.hasVideo
       }
     });
 
   } catch (error) {
-    console.error('ytdl.getInfo error:', error.message);
+    console.error('play-dl error:', error.message);
     console.error('Full error:', error);
     
     // Provide more specific error messages
