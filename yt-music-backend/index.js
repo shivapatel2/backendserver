@@ -19,15 +19,17 @@ app.get('/api/search', async (req, res) => {
   try {
     const search = await yt.search(query, { type: 'video' });
     
-    // The data structure for videos is different in the new library version.
-    const formatted = search.videos.map(video => ({
-      title: video.title.text,
-      videoId: video.id,
-      url: `https://www.youtube.com/watch?v=${video.id}`,
-      thumbnail: video.thumbnails[0].url,
-      duration: video.duration,
-      channel: video.author.name
-    }));
+    // The data structure can vary. This is a more defensive approach.
+    const formatted = search.videos
+      .filter(video => video.id && video.title) // Ensure the video has a title and ID
+      .map(video => ({
+        title: video.title?.text || video.title, // Handle cases where title is an object or a string
+        videoId: video.id,
+        url: `https://www.youtube.com/watch?v=${video.id}`,
+        thumbnail: video.thumbnails?.[0]?.url || null, // Safely access thumbnail, provide null if missing
+        duration: video.duration, // This might be null for live streams, which is acceptable
+        channel: video.author?.name || 'Unknown Channel' // Safely access author name
+      }));
     
     res.json(formatted);
   } catch (err) {
