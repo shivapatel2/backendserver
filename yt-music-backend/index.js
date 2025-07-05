@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Innertube } = require('youtubei.js');
-const ytAudio = require('youtube-audio-stream');
+const ytdl = require('ytdl-core');
 
 const app = express();
 app.use(cors());
@@ -35,10 +35,18 @@ app.get('/api/search', async (req, res) => {
 
 app.get('/api/audio/:videoId', (req, res) => {
   const url = `https://www.youtube.com/watch?v=${req.params.videoId}`;
-  res.set({ 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes' });
-  ytAudio(url).pipe(res).on('error', () => {
-    res.status(500).send("Error streaming audio");
-  });
+  try {
+    res.set({ 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes' });
+    ytdl(url, { filter: 'audioonly' })
+      .pipe(res)
+      .on('error', (err) => {
+        console.error("Error streaming audio:", err);
+        res.status(500).send("Error streaming audio");
+      });
+  } catch (err) {
+    console.error("Error setting up stream:", err);
+    res.status(500).send("Failed to start audio stream");
+  }
 });
 
 const PORT = process.env.PORT || 3001;
