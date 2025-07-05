@@ -66,28 +66,55 @@ app.get('/api/audio/:videoId', async (req, res) => {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
     console.log('Fetching info for URL:', url);
     
-    const info = await ytdl.getInfo(url);
+    // Configure ytdl with better options to avoid blocks
+    const options = {
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'DNT': '1',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        }
+      }
+    };
+    
+    const info = await ytdl.getInfo(url, options);
     console.log('Got video info, formats available:', info.formats.length);
+    
+    // Log all available formats for debugging
+    console.log('Available formats:');
+    info.formats.forEach((format, index) => {
+      console.log(`${index}: ${format.qualityLabel} - Audio: ${format.hasAudio} Video: ${format.hasVideo} - Bitrate: ${format.bitrate} - AudioBitrate: ${format.audioBitrate}`);
+    });
     
     // Find the best audio-only format with specific criteria
     let audioFormat = null;
     
     // First try to find a high quality audio-only format
-    audioFormat = ytdl.chooseFormat(info.formats, { 
-      quality: 'highestaudio',
-      filter: 'audioonly' 
-    });
+    try {
+      audioFormat = ytdl.chooseFormat(info.formats, { 
+        quality: 'highestaudio',
+        filter: 'audioonly' 
+      });
+      console.log('Found audio-only format:', audioFormat?.qualityLabel);
+    } catch (error) {
+      console.log('ytdl.chooseFormat failed, trying manual selection');
+    }
     
     // If no audio-only format found, try to find any audio format
     if (!audioFormat) {
       console.log('No audio-only format found, looking for any audio format');
       const audioFormats = info.formats.filter(format => 
-        format.hasAudio && !format.hasVideo
+        format.hasAudio && !format.hasVideo && format.url
       );
       if (audioFormats.length > 0) {
         // Sort by audio quality (bitrate)
         audioFormats.sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0));
         audioFormat = audioFormats[0];
+        console.log('Selected audio format:', audioFormat.qualityLabel);
       }
     }
     
@@ -95,7 +122,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
     if (!audioFormat) {
       console.log('No audio-only format found, looking for audio+video format');
       const audioVideoFormats = info.formats.filter(format => 
-        format.hasAudio && format.hasVideo
+        format.hasAudio && format.hasVideo && format.url
       );
       if (audioVideoFormats.length > 0) {
         // Sort by audio quality first, then by overall quality
@@ -105,6 +132,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
           return (b.bitrate || 0) - (a.bitrate || 0);
         });
         audioFormat = audioVideoFormats[0];
+        console.log('Selected audio+video format:', audioFormat.qualityLabel);
       }
     }
 
@@ -133,8 +161,21 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('ytdl.getInfo error:', error);
-    res.status(500).send('Failed to get audio stream information');
+    console.error('ytdl.getInfo error:', error.message);
+    console.error('Full error:', error);
+    
+    // Provide more specific error messages
+    if (error.message.includes('Video unavailable')) {
+      res.status(404).send('Video is unavailable or private');
+    } else if (error.message.includes('Sign in')) {
+      res.status(403).send('Video requires sign in');
+    } else if (error.message.includes('age-restricted')) {
+      res.status(403).send('Video is age-restricted');
+    } else if (error.message.includes('region')) {
+      res.status(403).send('Video is not available in this region');
+    } else {
+      res.status(500).send('Failed to get audio stream information');
+    }
   }
 });
 
