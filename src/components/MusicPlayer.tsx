@@ -85,11 +85,32 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
             }
           } catch (error) {
             console.error('Error fetching direct stream URL:', error);
-            // For now, we'll just set loading to false and not play anything
-            // In the future, we could implement a fallback to search for the same song on other platforms
-            setIsLoading(false);
-            setStreamError(error instanceof Error ? error.message : 'Failed to load the track. Please try again later or use an alternative source.');
-            return;
+            
+            // Try to find the same song on JioSaavn as a fallback
+            try {
+              console.log('YouTube failed, trying to find same song on JioSaavn...');
+              const searchQuery = `${currentTrack.title} ${currentTrack.artist}`;
+              
+              // Import the JioSaavn API function
+              const { searchTracksJioSaavn } = await import('@/services/jiosaavnApi');
+              const jioSaavnTracks = await searchTracksJioSaavn(searchQuery, 5);
+              
+              if (jioSaavnTracks.length > 0) {
+                const fallbackTrack = jioSaavnTracks[0];
+                console.log('Found fallback track on JioSaavn:', fallbackTrack.title);
+                
+                // Use the JioSaavn track's audio URL
+                audioUrl = fallbackTrack.fullTrackUrl || fallbackTrack.preview_url;
+                setStreamError(`YouTube unavailable. Playing from JioSaavn: ${fallbackTrack.title}`);
+              } else {
+                throw new Error('No fallback tracks found');
+              }
+            } catch (fallbackError) {
+              console.error('Fallback search failed:', fallbackError);
+              setStreamError(error instanceof Error ? error.message : 'Failed to load the track. Please try again later or use an alternative source.');
+              setIsLoading(false);
+              return;
+            }
           }
         }
         
