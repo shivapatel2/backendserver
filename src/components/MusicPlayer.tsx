@@ -45,25 +45,38 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
         if (currentTrack.source === 'youtube' && currentTrack.id) {
           try {
             const videoId = currentTrack.id.replace('youtube_', '');
+            console.log('Fetching YouTube audio for video ID:', videoId);
+            
             const response = await fetch(`https://yt-music-backend-6yj1.onrender.com/api/audio/${videoId}`);
+            console.log('Backend response status:', response.status);
+            
             if (!response.ok) {
-              throw new Error(`Failed to fetch stream URL: ${response.statusText}`);
+              const errorText = await response.text();
+              console.error('Backend error response:', errorText);
+              throw new Error(`Failed to fetch stream URL: ${response.status} ${response.statusText}`);
             }
+            
             const data = await response.json();
+            console.log('Backend response data:', data);
+            
             if (data.streamUrl) {
               audioUrl = data.streamUrl;
+              console.log('Using YouTube stream URL:', audioUrl);
             } else {
+              console.error('No stream URL in response:', data);
               throw new Error('Stream URL not found in response');
             }
           } catch (error) {
             console.error('Error fetching direct stream URL:', error);
-            // Fallback to JioSaavn or another source could be implemented here
+            // For now, we'll just set loading to false and not play anything
+            // In the future, we could implement a fallback to search for the same song on other platforms
             setIsLoading(false);
             return;
           }
         }
         
         if (audioRef.current && audioUrl) {
+          console.log('Setting audio source:', audioUrl);
           audioRef.current.src = audioUrl;
           audioRef.current.load();
         } else {
