@@ -51,33 +51,30 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-app.get('/api/audio/:videoId', (req, res) => {
+app.get('/api/audio/:videoId', async (req, res) => {
   const videoId = req.params.videoId;
   if (!videoId) return res.status(400).send("Missing videoId");
 
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-
   try {
-    const stream = ytdl(url, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      // This is the critical fix for Render environments
-      highWaterMark: 1 << 25, 
-    });
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const info = await ytdl.getInfo(url);
     
-    stream.on('error', (err) => {
-      console.error('Stream error:', err);
-      if (!res.headersSent) {
-        res.status(500).send('Error during streaming');
-      }
+    // Find the best audio-only format
+    const audioFormat = ytdl.chooseFormat(info.formats, { 
+      quality: 'highestaudio',
+      filter: 'audioonly' 
     });
 
-    res.set('Content-Type', 'audio/mpeg');
-    stream.pipe(res);
+    if (!audioFormat) {
+      return res.status(404).send('No suitable audio format found');
+    }
+
+    // Send the direct stream URL to the frontend
+    res.json({ streamUrl: audioFormat.url });
 
   } catch (error) {
-    console.error('ytdl error:', error);
-    res.status(500).send('Failed to start audio stream');
+    console.error('ytdl.getInfo error:', error);
+    res.status(500).send('Failed to get audio stream information');
   }
 });
 

@@ -35,18 +35,44 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
       setCurrentTime(0);
       setDuration(0);
       
-      // Reset audio element
       audioRef.current.pause();
-      
-      // Use full track URL if available, otherwise use preview
-      const audioUrl = currentTrack.fullTrackUrl || currentTrack.preview_url;
-      if (audioUrl) {
-        audioRef.current.src = audioUrl;
-        audioRef.current.load();
-      } else {
-        console.error('No audio URL available for track:', currentTrack.title);
-        setIsLoading(false);
-      }
+      audioRef.current.src = ''; // Clear the previous source immediately
+
+      const fetchAndPlayAudio = async () => {
+        let audioUrl = currentTrack.fullTrackUrl || currentTrack.preview_url;
+        
+        // If the track is from YouTube, fetch the direct stream URL
+        if (currentTrack.source === 'youtube' && currentTrack.id) {
+          try {
+            const videoId = currentTrack.id.replace('youtube_', '');
+            const response = await fetch(`https://yt-music-backend-6yj1.onrender.com/api/audio/${videoId}`);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch stream URL: ${response.statusText}`);
+            }
+            const data = await response.json();
+            if (data.streamUrl) {
+              audioUrl = data.streamUrl;
+            } else {
+              throw new Error('Stream URL not found in response');
+            }
+          } catch (error) {
+            console.error('Error fetching direct stream URL:', error);
+            // Fallback to JioSaavn or another source could be implemented here
+            setIsLoading(false);
+            return;
+          }
+        }
+        
+        if (audioRef.current && audioUrl) {
+          audioRef.current.src = audioUrl;
+          audioRef.current.load();
+        } else {
+          console.error('No audio URL available for track:', currentTrack.title);
+          setIsLoading(false);
+        }
+      };
+
+      fetchAndPlayAudio();
     }
   }, [currentTrack]);
 
