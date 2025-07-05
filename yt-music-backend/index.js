@@ -1,39 +1,53 @@
 const express = require('express');
 const cors = require('cors');
-const { Innertube } = require('youtubei.js');
 const ytdl = require('ytdl-core');
+const ytsr = require('ytsr');
 
 const app = express();
 app.use(cors());
 
-let yt;
-(async () => {
-  yt = await Innertube.create({ gl: 'US', hl: 'en' });
-  console.log("YouTube API ready");
-})();
+// Helper function to convert duration string (e.g., "1:23") to seconds
+const durationToSeconds = (duration) => {
+  if (!duration) return 0;
+  const parts = duration.split(':').map(Number);
+  let seconds = 0;
+  if (parts.length === 3) { // HH:MM:SS
+    seconds += parts[0] * 3600;
+    seconds += parts[1] * 60;
+    seconds += parts[2];
+  } else if (parts.length === 2) { // MM:SS
+    seconds += parts[0] * 60;
+    seconds += parts[1];
+  } else if (parts.length === 1) { // SS
+    seconds += parts[0];
+  }
+  return seconds;
+};
+
 
 app.get('/api/search', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).send("Missing query");
 
   try {
-    const search = await yt.search(query, { type: 'video' });
-    
-    // The data structure can vary. This is a more defensive approach.
-    const formatted = search.videos
-      .filter(video => video.id && video.title) // Ensure the video has a title and ID
-      .map(video => ({
-        title: video.title?.text || video.title, // Handle cases where title is an object or a string
-        videoId: video.id,
-        url: `https://www.youtube.com/watch?v=${video.id}`,
-        thumbnail: video.thumbnails?.[0]?.url || null, // Safely access thumbnail, provide null if missing
-        duration: video.duration, // This might be null for live streams, which is acceptable
-        channel: video.author?.name || 'Unknown Channel' // Safely access author name
-      }));
+    const searchResults = await ytsr(query, { limit: 20 });
+    const videos = searchResults.items.filter(item => item.type === 'video');
+
+    const formatted = videos.map(video => ({
+      title: video.title,
+      videoId: video.id,
+      url: video.url,
+      thumbnail: video.bestThumbnail.url,
+      duration: {
+        seconds: durationToSeconds(video.duration),
+        text: video.duration || '0:00'
+      },
+      channel: video.author?.name || 'Unknown Channel'
+    }));
     
     res.json(formatted);
   } catch (err) {
-    console.error("Search error", err);
+    console.error("Search error with ytsr:", err);
     res.status(500).send("Search failed");
   }
 });
