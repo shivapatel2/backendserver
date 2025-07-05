@@ -89,27 +89,80 @@ export const MusicPlayer = ({ currentTrack, isPlaying, onPlayPause }: MusicPlaye
             // Try to find the same song on JioSaavn as a fallback
             try {
               console.log('YouTube failed, trying to find same song on JioSaavn...');
-              const searchQuery = `${currentTrack.title} ${currentTrack.artist}`;
               
               // Import the JioSaavn API function
               const { searchTracksJioSaavn } = await import('@/services/jiosaavnApi');
-              const jioSaavnTracks = await searchTracksJioSaavn(searchQuery, 5);
+              
+              // Try multiple search strategies to find a match
+              let jioSaavnTracks = [];
+              let searchQuery = '';
+              
+              // Strategy 1: Try with title + artist
+              searchQuery = `${currentTrack.title} ${currentTrack.artist}`;
+              console.log('Trying JioSaavn search with:', searchQuery);
+              jioSaavnTracks = await searchTracksJioSaavn(searchQuery, 10);
+              
+              // Strategy 2: If no results, try with just the title
+              if (jioSaavnTracks.length === 0) {
+                searchQuery = currentTrack.title;
+                console.log('No results, trying with just title:', searchQuery);
+                jioSaavnTracks = await searchTracksJioSaavn(searchQuery, 10);
+              }
+              
+              // Strategy 3: If still no results, try with just the artist
+              if (jioSaavnTracks.length === 0) {
+                searchQuery = currentTrack.artist;
+                console.log('No results, trying with just artist:', searchQuery);
+                jioSaavnTracks = await searchTracksJioSaavn(searchQuery, 10);
+              }
+              
+              console.log('JioSaavn search results:', jioSaavnTracks.length, 'tracks found');
               
               if (jioSaavnTracks.length > 0) {
-                const fallbackTrack = jioSaavnTracks[0];
-                console.log('Found fallback track on JioSaavn:', fallbackTrack.title);
+                // Find the first track with a valid audio URL
+                const fallbackTrack = jioSaavnTracks.find(track => 
+                  track.fullTrackUrl || track.preview_url
+                );
                 
-                // Use the JioSaavn track's audio URL
-                audioUrl = fallbackTrack.fullTrackUrl || fallbackTrack.preview_url;
-                setStreamError(`YouTube unavailable. Playing from JioSaavn: ${fallbackTrack.title}`);
+                if (fallbackTrack) {
+                  console.log('Found fallback track on JioSaavn:', fallbackTrack.title);
+                  console.log('Audio URL:', fallbackTrack.fullTrackUrl || fallbackTrack.preview_url);
+                  
+                  // Use the JioSaavn track's audio URL
+                  audioUrl = fallbackTrack.fullTrackUrl || fallbackTrack.preview_url;
+                  setStreamError(`YouTube unavailable. Playing from JioSaavn: ${fallbackTrack.title}`);
+                } else {
+                  console.log('No tracks with valid audio URLs found');
+                  throw new Error('No tracks with valid audio URLs found');
+                }
               } else {
-                throw new Error('No fallback tracks found');
+                console.log('No matching tracks found on JioSaavn');
+                throw new Error('No matching tracks found on JioSaavn');
               }
             } catch (fallbackError) {
               console.error('Fallback search failed:', fallbackError);
-              setStreamError(error instanceof Error ? error.message : 'Failed to load the track. Please try again later or use an alternative source.');
-              setIsLoading(false);
-              return;
+              
+              // Try iTunes as a second fallback
+              try {
+                console.log('JioSaavn failed, trying iTunes...');
+                const { searchTracksITunes } = await import('@/services/musicApi');
+                const searchQuery = `${currentTrack.title} ${currentTrack.artist}`;
+                const itunesTracks = await searchTracksITunes(searchQuery, 5);
+                
+                if (itunesTracks.length > 0) {
+                  const itunesTrack = itunesTracks[0];
+                  console.log('Found fallback track on iTunes:', itunesTrack.title);
+                  audioUrl = itunesTrack.preview_url;
+                  setStreamError(`YouTube unavailable. Playing from iTunes: ${itunesTrack.title}`);
+                } else {
+                  throw new Error('No iTunes tracks found');
+                }
+              } catch (itunesError) {
+                console.error('iTunes fallback also failed:', itunesError);
+                setStreamError(error instanceof Error ? error.message : 'Failed to load the track. Please try again later or use an alternative source.');
+                setIsLoading(false);
+                return;
+              }
             }
           }
         }
